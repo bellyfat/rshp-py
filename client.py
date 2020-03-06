@@ -6,7 +6,7 @@ import select
 HOST = 'me.antkowiak.ddnss.de'
 PORT = 2280
 
-# s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 s.connect((HOST, PORT))
 
@@ -22,7 +22,7 @@ print('Server:', repr(data))
 
 s.close()
 
-extract data from server response
+# extract data from server response
 peer_IP = re.findall(r"\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}", data)[0]
 peer_IP = HOST
 print('Peer IP is', peer_IP)
@@ -65,7 +65,8 @@ else:
     loop_number = 0
     while True:
         port = start_port
-        print('Try port ' + port + '-' + (port + try_count)
+        print('Try port ' + port + '-' + (port + try_count))
+
         for udp_socket in udp_socket_list:
             udp_socket.sendto(b'Hello', (peer_IP, port))
             port = port + 1
