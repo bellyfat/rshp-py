@@ -89,11 +89,17 @@ else:
     for udp_socket in udp_socket_list:
         udp_socket.close()
 
-# Connect to server 
-server_response[0] = get_response()
-server_response[1] = get_response()
+def isFirst(string):
+    if '1st' in string:
+        return True
+    else:
+        return False
 
-peer_IP = ...
+# Connect to server 
+server_response[0] = s.recv(1024).decode()
+server_response[1] = s.recv(1024).decode()
+
+peer_IP = re.findall(r"\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}", server_response[0])[0]
 
 if isFirst(server_response[0]):
     print('Wait for peer to determine NAT type')
@@ -120,6 +126,7 @@ if isFirst(server_response[0]):
         udp_socket.sendto(b'Hello', (peer_IP, service_port))
 
     print('Wait for peer to find a hole...')
+    stop = False
     while True:
         ready_socks,_,_ = select.select(udp_socket_list, [], [], 50) 
         for udp_socket in ready_socks:
@@ -127,10 +134,19 @@ if isFirst(server_response[0]):
             if(addr):
                 print('Got Holepunch! Sending a stop signal to server') 
                 s.send(b'Stop!')
+                print('Waiting for second punch')
+                data, addr = udp_socket.recvfrom(1024)
+                print('Got second punch. Say hello')
+                udp_socket.sendto(b'hello', addr)
+                udp_socket.sendto(b'hello', addr)
+                stop = True
+
+        if stop:
+            break
 
         # Repunch after 50 seconds
         for udp_socket in udp_socket_list:
-            udp_socket.sendto(b'Hello', (peer_IP, service_port))
+            udp_socket.sendto(b'punch', (peer_IP, service_port))
 
 else:
     port = 55555
@@ -149,3 +165,35 @@ else:
     
     s.send(b'UDP port NOT consistent')
     print('NAT Router is not port consistent. Try the aggressive way...')
+    start_port = 32768
+    end_port = 656535
+    stop = False
+    for port in range(start_port, end_port):
+        ready_socks, _, _ = select.select([s], [], [], 0)
+        for sock in ready_socks:
+            data = sock.recv(1024)
+            print('Got stop signal')
+            stop = True
+        if stop:
+            break
+
+        print('Try port', port)
+        udp_socket.sendto(b'ping', (peer_IP, port))
+
+    if port == end_port:
+        print('No hole found')
+        s.close()
+        sys.exit()
+    
+    print('Found hole. Try connecting on last 10 ports')
+
+    for port in range(port-10, port):
+        udp_socket.settimeout(1)
+        print('Try port', port, 'again')
+        udp_socket.sendto(b'hello', (peer_IP, port))
+        data, addr = udp_socket.recvfrom(1024)
+        if data:
+            print('Found the hole!', addr)
+
+s.close()
+        
