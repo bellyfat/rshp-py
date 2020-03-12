@@ -8,9 +8,16 @@ HOST = 'me.antkowiak.ddnss.de'
 PORT = 2280
 server = (HOST, PORT)
 
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-s.connect(server)
+def is_udp_port_consistent(port):
+    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_socket.bind(('', port))
+    udp_socket.sendto(b'ping', ('me.antkowiak.ddnss.de', 2280))
+    data = udp_socket.recv(1024)
+    udp_socket.close()
+    if str(port) in data.decode():
+        return True
+    else:
+        return False
 
 def isFirst(string):
     if '1st' in string:
@@ -19,15 +26,20 @@ def isFirst(string):
         return False
 
 # Connect to server 
-server_response[0] = s.recv(1024).decode()
-print('Server:', server_response[0])
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.connect(server)
 
-server_response[1] = s.recv(1024).decode()
-print('Server:', server_response[1])
+response1 = s.recv(1024).decode()
+print('Server:', response1)
 
-peer_IP = re.findall(r"\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}", server_response[0])[0]
+response2 = s.recv(1024).decode()
+print('Server:', response2)
 
-if isFirst(server_response[0]):
+peer_IP = re.findall(r"\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}", response2)[0]
+
+udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+if isFirst(response1):
     print('Wait for peer to determine NAT type')
     data = s.recv(1024)
 
@@ -49,7 +61,7 @@ if isFirst(server_response[0]):
         udp_socket_list.append(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
         
     for udp_socket in udp_socket_list:
-        udp_socket.sendto(b'Hello', (peer_IP, service_port))
+        udp_socket.sendto(b'Hello', (peer_IP, 55555))
 
     print('Wait for peer to find a hole...')
     stop = False
@@ -72,7 +84,7 @@ if isFirst(server_response[0]):
 
         # Repunch after 50 seconds
         for udp_socket in udp_socket_list:
-            udp_socket.sendto(b'punch', (peer_IP, service_port))
+            udp_socket.sendto(b'punch', (peer_IP, 55555))
 
 else:
     port = 55555
@@ -91,8 +103,9 @@ else:
     
     s.send(b'UDP port NOT consistent')
     print('NAT Router is not port consistent. Try the aggressive way...')
-    start_port = 32768
-    end_port = 656535
+    time.sleep(2)
+    start_port = 32766
+    end_port = 65536
     stop = False
     for port in range(start_port, end_port):
         ready_socks, _, _ = select.select([s], [], [], 0)
@@ -106,7 +119,7 @@ else:
         print('Try port', port)
         udp_socket.sendto(b'ping', (peer_IP, port))
 
-    if port == end_port:
+    if port == end_port - 1:
         print('No hole found')
         s.close()
         sys.exit()
@@ -114,10 +127,14 @@ else:
     print('Found hole. Try connecting on last 10 ports')
 
     for port in range(port-10, port):
-        udp_socket.settimeout(1)
+        udp_socket.settimeout(2)
         print('Try port', port, 'again')
         udp_socket.sendto(b'hello', (peer_IP, port))
-        data, addr = udp_socket.recvfrom(1024)
+        try:
+            data, addr = udp_socket.recvfrom(1024)
+        except:
+            pass
+        
         if data:
             print('Found the hole!', addr)
 
