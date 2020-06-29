@@ -1,43 +1,34 @@
 import socket
-import json
+import time
+import re
+import select
+import sys
 
-port = 55555
+HOST = '185.10.244.253'
 
-s = socket.socket()
+FIRST_BIND_PORT = 50000
+HOLE_COUNT = 50
 
-s.bind(('', port))         
-print("socket binded to", port)
+udp_socket_list = []
 
-s.listen(5)      
+print('Punch a few holes...')
+for punch in range(HOLE_COUNT):
+    udp_socket_list.append(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+    
+for udp_socket in udp_socket_list:
+    udp_socket.sendto(b'punch', (HOST, 55555))
+
+print('Wait for peer to find a hole...')
+stop = False
 while True:
-    print("socket is listening") 
-    
-    connection1, addr1 = s.accept()      
-    print('Got 1st connection from', addr1) 
+    ready_socks,_,_ = select.select(udp_socket_list, [], [], 50) 
+    for udp_socket in ready_socks:
+        data, addr = udp_socket.recvfrom(1024)
+        if(addr):
+            print('Got Holepunch!', data) 
+            
+            break
 
-    connection1.sendall(b'You are the 1st (' + json.dumps(addr1).encode() + b'). Wait for peer...') 
-
-    connection2, addr2 = s.accept() 
-    print('Got 2nd connection from', addr2)
-
-    connection2.sendall(b'You are the 2nd (' + json.dumps(addr2).encode() + b')') 
-
-    # Inform cients about each other
-    connection1.sendall(b'2nd peer: ' + json.dumps(addr2).encode())
-    connection2.sendall(b'1st peer: ' + json.dumps(addr1).encode())
-
-    print('Wait for client 2 to determine NAT type')
-    data = connection2.recv(1024)
-    print('Forward answer to client 1:', data.decode())
-    connection1.sendall(data)
-    
-    if data.decode() == 'UDP port NOT consistent':
-        print('Wait for stop signal from client 1')
-        data = connection1.recv(1024)
-        print('Got stop signal. Forward to client 2')
-        connection2.sendall(b'Stop!')
-
-    connection1.close()
-    connection2.close()
-
-s.close()
+    # Repunch after 50 seconds
+    for udp_socket in udp_socket_list:
+        udp_socket.sendto(b'punch', (HOST, 55555))
